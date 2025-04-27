@@ -1,0 +1,22 @@
+TASKS :
+
+- Multiplayer movement smoothing
+	- Velocity data transfer
+
+- Velocity vector display
+
+- Bullets
+	- Generation
+	- Movement
+
+- Gameplay
+	- Upgrades
+	- Map ?
+	- 
+
+- Assets
+	- Ship
+	- Planets
+	- UI
+
+- Render

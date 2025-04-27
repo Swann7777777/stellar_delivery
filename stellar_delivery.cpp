@@ -15,8 +15,8 @@ public:
     float y = 0;
     float xv = 0;
     float yv = 0;
-    float speed = 30;
-    int size = 100;
+    float speed = 100;
+    int size = 1000;
 };
 
 class planet_class {
@@ -121,8 +121,8 @@ int main() {
     ENetEvent enet_event;
     ENetPeer* peer;
 
-    enet_address_set_host(&address, "127.0.0.1");
-    address.port = 16383;
+    enet_address_set_host(&address, "92.94.91.118");
+    address.port = 25565;
 
     peer = enet_host_connect(client, &address, 1, 0);
 
@@ -140,26 +140,41 @@ int main() {
         return -1;
     }
 
+    // In your client code, modify the wait loop to include a timeout:
     bool wait = true;
+    int timeout_attempts = 0;
+    const int MAX_TIMEOUT = 10; // 10 second timeout
 
     // Wait for initial planet data
-    while (wait) {
-        while (enet_host_service(client, &enet_event, 1000) > 0) {
+    while (wait && timeout_attempts < MAX_TIMEOUT) {
+        if (enet_host_service(client, &enet_event, 1000) > 0) {
             switch (enet_event.type) {
             case ENET_EVENT_TYPE_RECEIVE:
+                // Add a special message type or header to identify planet data
                 if (enet_event.packet->dataLength > sizeof(float) * 2) {
-                    std::cout << "Successfully received a packet !" << std::endl;
+                    std::cout << "Successfully received planet data!" << std::endl;
 
                     size_t planets_count = enet_event.packet->dataLength / sizeof(planet_class);
+                    std::cout << "Received " << planets_count << " planets" << std::endl;
 
                     planets.resize(planets_count);
                     std::memcpy(planets.data(), enet_event.packet->data, enet_event.packet->dataLength);
 
                     wait = false;
                 }
+                enet_packet_destroy(enet_event.packet);
                 break;
             }
         }
+        else {
+            timeout_attempts++;
+            std::cout << "Waiting for planet data... " << timeout_attempts << "/" << MAX_TIMEOUT << std::endl;
+        }
+    }
+
+    if (timeout_attempts >= MAX_TIMEOUT) {
+        std::cerr << "Timed out waiting for planet data" << std::endl;
+        return -1;
     }
 
     SDL_DisplayID* displays;
@@ -252,6 +267,9 @@ int main() {
     SDL_Texture* playerCountTexture = nullptr;
     SDL_FRect playerCountRect = { 10, 40, 0, 0 };
 
+
+
+
     SDL_Event event;
     float zoom = 1;
     bool run = true;
@@ -261,11 +279,16 @@ int main() {
     float network_time = 0.0f; // Separate timer for network updates
     int frameCount = 0;
     int currentFPS = 0;
+    float average_dt = 0.0f;
 
     while (run) {
         Uint64 ticks = SDL_GetTicks();
         float dt = (ticks - old_ticks) / 1000.0f;
         old_ticks = ticks;
+
+        
+
+
 
         // FPS calculation
         time += dt;
@@ -274,6 +297,12 @@ int main() {
 
         // Update FPS and player count text every second
         if (time >= 1.0f) {
+
+            average_dt = time / frameCount;
+
+
+
+
             currentFPS = frameCount;
             fps_string = "FPS: " + std::to_string(currentFPS);
             players_string = "Players: " + std::to_string(other_players.size() + 1); // +1 for local player
@@ -381,36 +410,47 @@ int main() {
         for (int i = 0; i < planets.size(); i++) {
             float dx = planets[i].x - player.x;
             float dy = planets[i].y - player.y;
-            float distanceSquared = dx * dx + dy * dy;
+
+
+			if (abs(dx) <= planets[i].size && abs(dy) <= planets[i].size) {
+                if (sqrt(pow(planets[i].x - player.x, 2) + pow(planets[i].y - player.y, 2)) < planets[i].size / 2.0f) {
+                    //player.x = 0;
+                    //player.y = 0;
+                    //player.xv = 0;
+                    //player.yv = 0;
+                    //zoom = 1;
+                }
+			}
 
 
 
-            // Scale the gravitational force to make it more noticeable
-            float gravitationalConstant = 1000000.0f; // Adjust this value as needed
-            float force = (gravitationalConstant * planets[i].size) / distanceSquared;
-            float distance = sqrt(distanceSquared);
+            float distance = sqrt((dx * dx) + (dy * dy));
 
-            // Normalize the direction and apply the force
-            player.xv += force * (dx / distance) * dt;
-            player.yv += force * (dy / distance) * dt;
-        }
+			float distance_treshold = planets[i].size * 100.0f;
 
-        // Collision detection with planets
-        for (int i = 0; i < planets.size(); i++) {
-            if (sqrt(pow(planets[i].x - player.x, 2) + pow(planets[i].y - player.y, 2)) < planets[i].size / 2.0f) {
-                player.x = 0;
-                player.y = 0;
-                player.xv = 0;
-                player.yv = 0;
-                zoom = 1;
+
+
+            if (distance < distance_treshold) {
+                // Scale the gravitational force to make it more noticeable
+                float gravitationalConstant = 300000.0f; // Adjust this value as needed
+                float force = (gravitationalConstant * planets[i].size) / distance;
+
+                // Normalize the direction and apply the force
+                player.xv += force * (dx / distance) * dt;
+                player.yv += force * (dy / distance) * dt;
             }
+
+
+
+
         }
+
 
         // Update player position and velocity
         player.x += player.xv * dt;
         player.y += player.yv * dt;
-        player.xv *= pow(0.9f, dt);
-        player.yv *= pow(0.9f, dt);
+        //player.xv *= pow(0.9f, dt);
+        //player.yv *= pow(0.9f, dt);
 
         // Send position updates every 0.1 seconds (adjust as needed for your game)
         if (network_time >= 0.1f) {
@@ -435,13 +475,20 @@ int main() {
 
         // Render planets
         for (int i = 0; i < planets.size(); i++) {
-            SDL_FRect planet_rect = {
-                (w / 2) + ((planets[i].x - player.x) / zoom) - ((planets[i].size / zoom) / 2),
-                (h / 2) - ((planets[i].y - player.y) / zoom) - ((planets[i].size / zoom) / 2),
-                planets[i].size / zoom,
-                planets[i].size / zoom };
+            float dx = abs(planets[i].x - player.x);
+            float dy = abs(planets[i].y - player.y);
 
-            SDL_RenderTexture(renderer, planet_textures[i], NULL, &planet_rect);
+
+			if (dx < (w / 2) * zoom || dy < (h / 2) * zoom) {
+                SDL_FRect planet_rect = {
+                    (w / 2) + ((planets[i].x - player.x) / zoom) - ((planets[i].size / zoom) / 2),
+                    (h / 2) - ((planets[i].y - player.y) / zoom) - ((planets[i].size / zoom) / 2),
+                    planets[i].size / zoom,
+                    planets[i].size / zoom };
+
+                SDL_RenderTexture(renderer, planet_textures[i], NULL, &planet_rect);
+			}
+
         }
 
         // Render other players
@@ -481,6 +528,15 @@ int main() {
         if (playerCountTexture) {
             SDL_RenderTexture(renderer, playerCountTexture, NULL, &playerCountRect);
         }
+
+
+
+
+
+
+
+        SDL_RenderLine(renderer, w / 2, h / 2, w / 2 - (player.xv / zoom) * average_dt * 30, h / 2 + (player.yv / zoom) * average_dt * 30);
+
 
         // Present renderer
         SDL_RenderPresent(renderer);
