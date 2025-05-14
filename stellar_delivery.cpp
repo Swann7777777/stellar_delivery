@@ -9,8 +9,23 @@
 #include <cmath>
 #include <unordered_map>
 
-class player_class {
-public:
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Classes
+
+struct player_struct {
+
     float x = 0;
     float y = 0;
     float xv = 0;
@@ -19,20 +34,36 @@ public:
     int size = 1000;
 };
 
-class planet_class {
-public:
+
+
+struct planet_struct {
+
     int x;
     int y;
     int size;
     int index;
 };
 
-// Structure to represent other players
-struct remote_player {
+
+
+struct remote_player_struct {
+
     float x;
     float y;
     SDL_Color color;
 };
+
+
+
+
+
+
+
+
+
+
+
+// Initialization and cleanup functions
 
 bool initialize() {
     if (enet_initialize() < 0) {
@@ -54,6 +85,9 @@ bool initialize() {
 
     return true;
 }
+
+
+
 
 bool cleanup(SDL_Window* window, SDL_Renderer* renderer, TTF_Font* font, SDL_Surface* textSurface, SDL_Texture* textTexture) {
     if (font) {
@@ -82,32 +116,37 @@ bool cleanup(SDL_Window* window, SDL_Renderer* renderer, TTF_Font* font, SDL_Sur
     return true;
 }
 
-// Generate a random color for other players
-SDL_Color generateRandomColor(uint32_t seed) {
-    std::mt19937 gen(seed);
-    std::uniform_int_distribution<> color_dist(50, 255);
 
-    SDL_Color color;
-    color.r = color_dist(gen);
-    color.g = color_dist(gen);
-    color.b = color_dist(gen);
-    color.a = 255;
 
-    return color;
-}
+
+
+
+
+
+
+
+
+
+// Main function
 
 int main() {
-    if (!initialize()) {
-        std::cerr << "Initialization failed!" << std::endl;
-        return -1;
-    }
 
-    player_class player;
-    std::vector<planet_class> planets;
+
+	// Initialize libraries
+
+	initialize();
+
+
+
+
+    // Create the player
+
+    player_struct player;
+    std::vector<planet_struct> planets;
 
     // Map to store other player positions
     // Key is the peer's address (host + port as unique identifier)
-    std::unordered_map<uint64_t, remote_player> other_players;
+    std::unordered_map<uint64_t, remote_player_struct> other_players;
 
     ENetHost* client;
     client = enet_host_create(NULL, 1, 1, 0, 0);
@@ -121,8 +160,8 @@ int main() {
     ENetEvent enet_event;
     ENetPeer* peer;
 
-    enet_address_set_host(&address, "92.94.91.118");
-    address.port = 25565;
+    enet_address_set_host(&address, "127.0.0.1");
+    address.port = 16383;
 
     peer = enet_host_connect(client, &address, 1, 0);
 
@@ -154,7 +193,7 @@ int main() {
                 if (enet_event.packet->dataLength > sizeof(float) * 2) {
                     std::cout << "Successfully received planet data!" << std::endl;
 
-                    size_t planets_count = enet_event.packet->dataLength / sizeof(planet_class);
+                    size_t planets_count = enet_event.packet->dataLength / sizeof(planet_struct);
                     std::cout << "Received " << planets_count << " planets" << std::endl;
 
                     planets.resize(planets_count);
@@ -368,7 +407,7 @@ int main() {
                     // Add or update the player position
                     if (other_players.find(player_id) == other_players.end()) {
                         // New player, generate a random color
-                        other_players[player_id] = { x, y, generateRandomColor(player_id) };
+                        other_players[player_id] = { x, y, {255, 0, 0, 255} };
                     }
                     else {
                         // Update existing player position
@@ -494,7 +533,7 @@ int main() {
         // Render other players
         // Render other players
         for (auto it = other_players.begin(); it != other_players.end(); ++it) {
-            const remote_player& remote = it->second;
+            const remote_player_struct& remote = it->second;
 
             SDL_FRect remote_player_rect = {
                 (w / 2) + ((remote.x - player.x) / zoom) - ((player.size / zoom) / 2),
