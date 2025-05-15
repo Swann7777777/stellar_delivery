@@ -89,6 +89,9 @@ bool initialize() {
 
 
 
+
+
+
 bool cleanup(SDL_Window* window, SDL_Renderer* renderer, TTF_Font* font, SDL_Surface* textSurface, SDL_Texture* textTexture) {
     if (font) {
         TTF_CloseFont(font);
@@ -144,8 +147,10 @@ int main() {
     player_struct player;
     std::vector<planet_struct> planets;
 
-    // Map to store other player positions
-    // Key is the peer's address (host + port as unique identifier)
+    
+
+	// Enet client setup
+
     std::unordered_map<uint64_t, remote_player_struct> other_players;
 
     ENetHost* client;
@@ -161,7 +166,7 @@ int main() {
     ENetPeer* peer;
 
     enet_address_set_host(&address, "127.0.0.1");
-    address.port = 16383;
+    address.port = 25565;
 
     peer = enet_host_connect(client, &address, 1, 0);
 
@@ -179,42 +184,37 @@ int main() {
         return -1;
     }
 
-    // In your client code, modify the wait loop to include a timeout:
-    bool wait = true;
-    int timeout_attempts = 0;
-    const int MAX_TIMEOUT = 10; // 10 second timeout
+    
 
-    // Wait for initial planet data
-    while (wait && timeout_attempts < MAX_TIMEOUT) {
-        if (enet_host_service(client, &enet_event, 1000) > 0) {
-            switch (enet_event.type) {
-            case ENET_EVENT_TYPE_RECEIVE:
-                // Add a special message type or header to identify planet data
-                if (enet_event.packet->dataLength > sizeof(float) * 2) {
-                    std::cout << "Successfully received planet data!" << std::endl;
 
-                    size_t planets_count = enet_event.packet->dataLength / sizeof(planet_struct);
-                    std::cout << "Received " << planets_count << " planets" << std::endl;
 
-                    planets.resize(planets_count);
-                    std::memcpy(planets.data(), enet_event.packet->data, enet_event.packet->dataLength);
 
-                    wait = false;
-                }
-                enet_packet_destroy(enet_event.packet);
+
+
+
+    if (enet_host_service(client, &enet_event, 1000) > 0) {
+        switch (enet_event.type) {
+        case ENET_EVENT_TYPE_RECEIVE:
+            // Add a special message type or header to identify planet data
+            if (enet_event.packet->dataLength > sizeof(float) * 2) {
+                std::cout << "Successfully received planet data!" << std::endl;
+
+                size_t planets_count = enet_event.packet->dataLength / sizeof(planet_struct);
+                std::cout << "Received " << planets_count << " planets" << std::endl;
+
+                planets.resize(planets_count);
+                std::memcpy(planets.data(), enet_event.packet->data, enet_event.packet->dataLength);
+
                 break;
             }
-        }
-        else {
-            timeout_attempts++;
-            std::cout << "Waiting for planet data... " << timeout_attempts << "/" << MAX_TIMEOUT << std::endl;
+            enet_packet_destroy(enet_event.packet);
+            break;
         }
     }
 
-    if (timeout_attempts >= MAX_TIMEOUT) {
-        std::cerr << "Timed out waiting for planet data" << std::endl;
-        return -1;
-    }
+
+
+	std::cout << "Breakpoint 1" << std::endl;
 
     SDL_DisplayID* displays;
     int display_count;
@@ -270,30 +270,27 @@ int main() {
         return -1;
     }
 
-    std::vector<SDL_Surface*> planet_images;
+    std::vector<SDL_Texture*> planet_textures;
+
 
     // Load planet images
-    for (int i = 1; i <= 5; ++i) {
+    for (int i = 1; i <= 3; ++i) {
         std::string path = "assets/planets/" + std::to_string(i) + ".png";
         SDL_Surface* image = IMG_Load(path.c_str());
         if (!image) {
             std::cerr << "Failed to load " << path << std::endl;
             return -1;
         }
-        planet_images.push_back(image);
-    }
 
-    std::vector<SDL_Texture*> planet_textures;
-
-    for (int i = 0; i < planets.size(); i++) {
-        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, planet_images[planets[i].index]);
-        if (!texture) {
-            std::cerr << "Failed to create texture from surface: " << SDL_GetError() << std::endl;
-            return -1;
-        }
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, image);
         SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
         planet_textures.push_back(texture);
     }
+
+
+	std::cout << "Breakpoint 2" << std::endl;
+
+
 
     std::string fps_string = "FPS: --";
     std::string players_string = "Players: 1";
@@ -321,6 +318,8 @@ int main() {
     float average_dt = 0.0f;
 
     while (run) {
+
+
         Uint64 ticks = SDL_GetTicks();
         float dt = (ticks - old_ticks) / 1000.0f;
         old_ticks = ticks;
@@ -525,13 +524,13 @@ int main() {
                     planets[i].size / zoom,
                     planets[i].size / zoom };
 
-                SDL_RenderTexture(renderer, planet_textures[i], NULL, &planet_rect);
+                SDL_RenderTexture(renderer, planet_textures[planets[i].index], NULL, &planet_rect);
 			}
 
         }
 
         // Render other players
-        // Render other players
+
         for (auto it = other_players.begin(); it != other_players.end(); ++it) {
             const remote_player_struct& remote = it->second;
 
@@ -540,7 +539,7 @@ int main() {
                 (h / 2) - ((remote.y - player.y) / zoom) - ((player.size / zoom) / 2),
                 player.size / zoom, player.size / zoom };
 
-            // Fix SDL_SetRenderDrawColor (needs 5 args: renderer, r, g, b, a)
+
             SDL_SetRenderDrawColor(renderer,
                 remote.color.r,
                 remote.color.g,
@@ -587,11 +586,6 @@ int main() {
     // Clean up planet textures
     for (auto texture : planet_textures) {
         SDL_DestroyTexture(texture);
-    }
-
-    // Clean up planet images
-    for (auto surface : planet_images) {
-        SDL_DestroySurface(surface);
     }
 
     // Disconnect gracefully
